@@ -4,7 +4,7 @@
 
 pkgname=firefox
 pkgver=107.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Standalone web browser from mozilla.org"
 arch=(aarch64)
 license=(MPL GPL LGPL)
