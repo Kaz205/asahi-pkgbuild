@@ -16,14 +16,14 @@ noautobuild=1
 
 pkgname=glibc
 pkgver=2.36
-_commit=2bd815d8347851212b9a91dbdca8053f4dbdac87
-pkgrel=6
-arch=(x86_64)
+_commit=a7dafdbf27ddd89f115ef7c0bed79410de746784
+pkgrel=7
+arch=(aarch64)
 url='https://www.gnu.org/software/libc'
 license=(GPL LGPL)
 makedepends=(git gd python)
-options=(debug staticlibs !lto !distcc)
-source=(git+https://sourceware.org/git/glibc.git#commit=${_commit}
+options=(staticlibs !lto !distcc)
+source=(git+https://github.com/Kaz205/glibc.git#commit=${_commit}
         locale.gen.txt
         locale-gen
         sdt.h sdt-config.h
@@ -43,11 +43,6 @@ prepare() {
 
   [[ -d glibc-$pkgver ]] && ln -s glibc-$pkgver glibc
   cd glibc
-
-  # re-enable `--hash-style=both` for building shared objects due to issues with EPIC's EAC
-  # which relies on DT_HASH to be present in these libs.
-  # reconsider 2023-01
-  patch -Np1 -i "${srcdir}"/reenable_DT_HASH.patch
 }
 
 build() {
@@ -62,13 +57,14 @@ build() {
       --disable-crypt
       --disable-profile
       --disable-werror
+      --enable-kernel=5.15
   )
 
   cd "${srcdir}"/glibc-build
 
   # ALARM: Specify build host types
   [[ $CARCH == "armv7h" ]] && _configure_flags+=(--host=armv7l-unknown-linux-gnueabihf --build=armv7l-unknown-linux-gnueabihf)
-  [[ $CARCH == "aarch64" ]] && _configure_flags+=(--host=aarch64-unknown-linux-gnu --build=aarch64-unknown-linux-gnu --enable-memory-tagging)
+  [[ $CARCH == "aarch64" ]] && _configure_flags+=(--host=aarch64-unknown-linux-gnu --build=aarch64-unknown-linux-gnu)
 
   echo "slibdir=/usr/lib" >> configparms
   echo "rtlddir=/usr/lib" >> configparms
@@ -87,52 +83,16 @@ build() {
 
   # build libraries with fortify disabled
   echo "build-programs=no" >> configparms
-  make -O
+  make -O -j8
 
   # re-enable fortify for programs
   sed -i "/build-programs=/s#no#yes#" configparms
   echo "CFLAGS += -Wp,-D_FORTIFY_SOURCE=2" >> configparms
-  make -O
-
-  # build info pages manually for reproducibility
-  make info
+  make -O -j8
 
   # pregenerate C.UTF-8 locale until it is built into glibc
   # (https://sourceware.org/glibc/wiki/Proposals/C.UTF-8, FS#74864)-
   elf/ld.so --library-path "$PWD" locale/localedef -c -f ../glibc/localedata/charmaps/UTF-8 -i ../glibc/localedata/locales/C ../C.UTF-8/
-}
-
-# Credits for skip_test() and check() @allanmcrae
-# https://github.com/allanmcrae/toolchain/blob/f18604d70c5933c31b51a320978711e4e6791cf1/glibc/PKGBUILD
-skip_test() {
-  test=${1}
-  file=${2}
-  sed -i "s/\b${test}\b//" "${srcdir}"/glibc/${file}
-}
-
-check() {
-  cd glibc-build
-
-  # adjust/remove buildflags that cause false-positive testsuite failures
-  sed -i '/FORTIFY/d' configparms                                     # failure to build testsuite
-  sed -i 's/-Werror=format-security/-Wformat-security/' config.make   # failure to build testsuite
-  sed -i '/CFLAGS/s/-fno-plt//' config.make                           # 16 failures
-  sed -i '/CFLAGS/s/-fexceptions//' config.make                       # 1 failure
-  LDFLAGS=${LDFLAGS/,-z,now/}                                         # 10 failures
-
-  # The following tests fail due to restrictions in the Arch build system
-  # The correct fix is to add the following to the systemd-nspawn call:
-  # --system-call-filter="@clock @memlock @pkey"
-  skip_test test-errno-linux        sysdeps/unix/sysv/linux/Makefile
-  skip_test tst-mlock2              sysdeps/unix/sysv/linux/Makefile
-  skip_test tst-ntp_gettime         sysdeps/unix/sysv/linux/Makefile
-  skip_test tst-ntp_gettimex        sysdeps/unix/sysv/linux/Makefile
-  skip_test tst-pkey                sysdeps/unix/sysv/linux/Makefile
-  skip_test tst-process_mrelease    sysdeps/unix/sysv/linux/Makefile
-  skip_test tst-adjtime             time/Makefile
-  skip_test tst-clock2              time/Makefile
-
-  make -O check
 }
 
 package() {
@@ -145,7 +105,7 @@ package() {
           etc/locale.gen
           etc/nscd.conf)
 
-  make -C glibc-build install_root="${pkgdir}" install
+  make -C glibc-build install_root="${pkgdir}" install -j8
   rm -f "${pkgdir}"/etc/ld.so.cache
 
   # Shipped in tzdata
