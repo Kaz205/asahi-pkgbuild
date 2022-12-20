@@ -4,13 +4,13 @@
 buildarch=8
 
 _rcver=6.1
-_rcrel=3
-_asahirel=1
+#_rcrel=
+_asahirel=102
 pkgrel=1
 
 pkgbase=linux-asahi
 #_commit_id=asahi-${_nextver}-${_asahirel}
-_commit_id=asahi-${_rcver}${_rcrel+-rc}${_rcrel}-${_asahirel}
+_commit_id=f843ae9a5b7e3338d4970faf9b7b6097715a7a42
 _srcname=linux-${_commit_id}
 _kernelname=${pkgbase#linux}
 _desc="AArch64 Apple Silicon (M1 development kernel)"
@@ -20,16 +20,16 @@ url="http://www.kernel.org/"
 license=('GPL2')
 
 makedepends=(
-  bc dtc kmod libelf pahole cpio perl rust rust-src rust-bindgen tar xz xmlto
+  bc dtc kmod libelf pahole cpio perl rust rust-src rust-bindgen tar xz
 )
 options=('!strip')
 source=(
-  https://github.com/AsahiLinux/linux/archive/${_commit_id}.tar.gz
+  https://github.com/Kaz205/linux/archive/${_commit_id}.tar.gz
   config         # the main kernel config file
 )
-sha256sums=('e2437843610c3f4b17f876bd9b1abaebedc415097c49c15ce7bdc7933461c87c'
+sha256sums=('SKIP'
             'bc049d45eb552d7b3a487fba57c2261257dd2cef21a44b4913f0ea0b06cf0b5f')
-b2sums=('d42afcf2392a10034703fb7cb72823a97b4e2c4dd2f809efa69fac6fde948f8f2c5a17d4546ea6974af1f2c24b78ec4f4c82e3f7b0e96513065862a7d8b065a2'
+b2sums=('SKIP'
         'e7f6a0df2b6a30eade41fc231f40072b2e158879d6600eb255f6fc1f78c08d03ca77ca90eca3e73e2c43c9b7b24ea904388f48d32fdacf735e44ceca49996f2c')
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_USER=$pkgbase
@@ -50,10 +50,10 @@ prepare() {
     patch -Np1 < "../$src"
   done
 
+  export PATH="$HOME/clang+llvm-15.0.6-aarch64-linux-gnu/bin:$PATH"
+  export LLVM=1
   echo "Setting config..."
-  cp ../config .config
-  make olddefconfig
-  diff -u ../config .config || :
+  make asahi_defconfig -j9
 
   make -s kernelrelease > version
   echo "Prepared $pkgbase version $(<version)"
@@ -61,7 +61,7 @@ prepare() {
 
 build() {
   cd $_srcname
-  make all
+  make all -j9
 }
 
 _package() {
@@ -85,7 +85,7 @@ _package() {
   echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
 
   echo "Installing modules..."
-  make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 modules_install
+  make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 modules_install -j9
 
   echo "Installing device trees..."
   install -Dt "$modulesdir/dtbs" arch/arm64/boot/dts/apple/*.dtb
