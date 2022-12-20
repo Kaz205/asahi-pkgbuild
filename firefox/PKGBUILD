@@ -3,7 +3,7 @@
 # Contributor: Jakub Schmidtke <sjakub@gmail.com>
 
 pkgname=firefox
-pkgver=108.0
+pkgver=108.0.1
 pkgrel=1
 pkgdesc="Standalone web browser from mozilla.org"
 arch=(aarch64)
