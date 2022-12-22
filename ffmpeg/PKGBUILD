@@ -19,7 +19,7 @@ pkgver=5.1.2
 pkgrel=1
 epoch=2
 pkgdesc='Complete solution to record, convert and stream audio and video'
-arch=(x86_64)
+arch=(aarch64)
 url=https://ffmpeg.org/
 license=(GPL3)
 depends=(
@@ -103,9 +103,7 @@ provides=(
   libswresample.so
   libswscale.so
 )
-options=(
-  debug
-)
+options=()
 _tag=1326fe9d4c85cca1ee774b072ef4fa337694f2e7
 source=(
   git+https://git.ffmpeg.org/ffmpeg.git?signed#tag=${_tag}
@@ -176,6 +174,7 @@ build() {
     --enable-libxml2 \
     --enable-libxvid \
     --enable-libzimg \
+    --enable-lto \
     --enable-opencl \
     --enable-opengl \
     --enable-shared \
