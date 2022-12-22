@@ -17,13 +17,13 @@
 
 noautobuild=1
 
-pkgname=(gcc gcc-libs gcc-fortran gcc-objc gcc-go gcc-d lto-dump libgccjit)
+pkgname=(gcc gcc-libs)
 pkgver=12.2.0
 _majorver=${pkgver%%.*}
 _commit=2ee5e4300186a92ad73f1a1a64cb918dc76c8d67
 pkgrel=1
 pkgdesc='The GNU Compiler Collection'
-arch=(x86_64)
+arch=(aarch64)
 license=(GPL3 LGPL FDL custom)
 url='https://gcc.gnu.org'
 makedepends=(binutils libmpc doxygen python git libxcrypt zstd)
@@ -31,7 +31,6 @@ checkdepends=(dejagnu inetutils tcl expect python-pytest)
 makedepends=(
   binutils
   doxygen
-  gcc-d
   git
   libisl
   libmpc
@@ -81,12 +80,9 @@ prepare() {
   # Reproducible gcc-ada
   patch -Np0 < "$srcdir/gcc-ada-repro.patch"
 
-  # tree-optimization/105562 - avoid uninit diagnostic with better FRE
-  patch -Np1 < "$srcdir/844a5c8ca.patch"
-
   # ALARM: Specify build host types, triplet patch
   [[ $CARCH == "armv7h" ]] && CONFIGFLAG="--host=armv7l-unknown-linux-gnueabihf --build=armv7l-unknown-linux-gnueabihf --with-arch=armv7-a --with-float=hard --with-fpu=neon"
-  [[ $CARCH == "aarch64" ]] && CONFIGFLAG="--host=aarch64-unknown-linux-gnu --build=aarch64-unknown-linux-gnu --with-arch=armv8-a --enable-fix-cortex-a53-835769 --enable-fix-cortex-a53-843419"
+  [[ $CARCH == "aarch64" ]] && CONFIGFLAG="--host=aarch64-unknown-linux-gnu --build=aarch64-unknown-linux-gnu --with-arch=armv8-a"
 
   mkdir -p "$srcdir/gcc-build"
   mkdir -p "$srcdir/libgccjit-build"
@@ -131,7 +127,7 @@ build() {
   CXXFLAGS=${CXXFLAGS/-Werror=format-security/}
 
   "$srcdir/gcc/configure" \
-    --enable-languages=c,c++,fortran,go,lto,objc,obj-c++,d \
+    --enable-languages=c,c++,lto \
     --enable-bootstrap \
     "${_confflags[@]:?_confflags unset}"
 
@@ -141,9 +137,6 @@ build() {
           BOOT_LDFLAGS="$LDFLAGS" \
           LDFLAGS_FOR_TARGET="$LDFLAGS" \
           bootstrap
-
-  # make documentation
-  make -O -C $CHOST/libstdc++-v3/doc doc-man-doxygen
 
   # Build libgccjit separately, to avoid building all compilers with --enable-host-shared
   # which brings a performance penalty
@@ -180,7 +173,7 @@ package_gcc-libs() {
   pkgdesc='Runtime libraries shipped by GCC'
   depends=('glibc>=2.27')
   options=(!emptydirs !strip)
-  provides=(libgo.so libgfortran.so libgphobos.so
+  provides=(libgo.so libgphobos.so
             libubsan.so libasan.so liblsan.so)
   if [[ $CARCH == "aarch64" ]]; then
     provides+=(libtsan.so)
@@ -271,10 +264,6 @@ package_gcc() {
   fi
   make -C $CHOST/libsanitizer/lsan DESTDIR="$pkgdir" install-nodist_toolexeclibHEADERS
 
-  make -C gcc DESTDIR="$pkgdir" install-man install-info
-  rm "$pkgdir"/usr/share/man/man1/{gccgo,gfortran,lto-dump,gdc}.1
-  rm "$pkgdir"/usr/share/info/{gccgo,gfortran,gdc}.info
-
   make -C libcpp DESTDIR="$pkgdir" install
   make -C gcc DESTDIR="$pkgdir" install-po
 
@@ -285,115 +274,9 @@ package_gcc() {
   install -Dm755 "$srcdir/c89" "$pkgdir/usr/bin/c89"
   install -Dm755 "$srcdir/c99" "$pkgdir/usr/bin/c99"
 
-  # install the libstdc++ man pages
-  make -C $CHOST/libstdc++-v3/doc DESTDIR="$pkgdir" doc-install-man
-
   # byte-compile python libraries
   python -m compileall "$pkgdir/usr/share/gcc-${pkgver%%+*}/"
   python -O -m compileall "$pkgdir/usr/share/gcc-${pkgver%%+*}/"
-
-  # Install Runtime Library Exception
-  install -d "$pkgdir/usr/share/licenses/$pkgname/"
-  ln -s /usr/share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION \
-    "$pkgdir/usr/share/licenses/$pkgname/"
-}
-
-package_gcc-fortran() {
-  pkgdesc='Fortran front-end for GCC'
-  depends=("gcc=$pkgver-$pkgrel" libisl.so)
-
-  cd gcc-build
-  make -C $CHOST/libgfortran DESTDIR="$pkgdir" install-cafexeclibLTLIBRARIES \
-    install-{toolexeclibDATA,nodist_fincludeHEADERS,gfor_cHEADERS}
-  make -C $CHOST/libgomp DESTDIR="$pkgdir" install-nodist_fincludeHEADERS
-  make -C gcc DESTDIR="$pkgdir" fortran.install-{common,man,info}
-  install -Dm755 gcc/f951 "$pkgdir/${_libdir}/f951"
-
-  ln -s gfortran "$pkgdir/usr/bin/f95"
-
-  # Install Runtime Library Exception
-  install -d "$pkgdir/usr/share/licenses/$pkgname/"
-  ln -s /usr/share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION \
-    "$pkgdir/usr/share/licenses/$pkgname/"
-}
-
-package_gcc-objc() {
-  pkgdesc='Objective-C front-end for GCC'
-  depends=("gcc=$pkgver-$pkgrel" libisl.so)
-
-  cd gcc-build
-  make DESTDIR="$pkgdir" -C $CHOST/libobjc install-headers
-  install -dm755 "$pkgdir/${_libdir}"
-  install -m755 gcc/cc1obj{,plus} "$pkgdir/${_libdir}/"
-
-  # Install Runtime Library Exception
-  install -d "$pkgdir/usr/share/licenses/$pkgname/"
-  ln -s /usr/share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION \
-    "$pkgdir/usr/share/licenses/$pkgname/"
-}
-
-package_gcc-go() {
-  pkgdesc='Go front-end for GCC'
-  depends=("gcc=$pkgver-$pkgrel" libisl.so)
-  provides=("go=1.18")
-  conflicts=(go)
-
-  cd gcc-build
-  make -C $CHOST/libgo DESTDIR="$pkgdir" install-exec-am
-  make DESTDIR="$pkgdir" install-gotools
-  make -C gcc DESTDIR="$pkgdir" go.install-{common,man,info}
-
-  rm -f "$pkgdir"/usr/lib/libgo.so*
-  install -Dm755 gcc/go1 "$pkgdir/${_libdir}/go1"
-
-  # Install Runtime Library Exception
-  install -d "$pkgdir/usr/share/licenses/$pkgname/"
-  ln -s /usr/share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION \
-    "$pkgdir/usr/share/licenses/$pkgname/"
-}
-
-package_gcc-d() {
-  pkgdesc="D frontend for GCC"
-  depends=("gcc=$pkgver-$pkgrel" libisl.so)
-  provides=(gdc)
-  replaces=(gdc)
-  options=(staticlibs debug)
-
-  cd gcc-build
-  make -C gcc DESTDIR="$pkgdir" d.install-{common,man,info}
-
-  install -Dm755 gcc/gdc "$pkgdir"/usr/bin/gdc
-  install -Dm755 gcc/d21 "$pkgdir"/"$_libdir"/d21
-
-  make -C $CHOST/libphobos DESTDIR="$pkgdir" install
-  rm -f "$pkgdir/usr/lib/"lib{gphobos,gdruntime}.so*
-  rm -f "$pkgdir/usr/lib32/"lib{gphobos,gdruntime}.so*
-
-  # Install Runtime Library Exception
-  install -d "$pkgdir/usr/share/licenses/$pkgname/"
-  ln -s /usr/share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION \
-    "$pkgdir/usr/share/licenses/$pkgname/"
-}
-
-package_lto-dump() {
-  pkgdesc="Dump link time optimization object files"
-  depends=("gcc=$pkgver-$pkgrel" libisl.so)
-
-  cd gcc-build
-  make -C gcc DESTDIR="$pkgdir" lto.install-{common,man,info}
-
-  # Install Runtime Library Exception
-  install -d "$pkgdir/usr/share/licenses/$pkgname/"
-  ln -s /usr/share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION \
-    "$pkgdir/usr/share/licenses/$pkgname/"
-}
-
-package_libgccjit() {
-  pkgdesc="Just-In-Time Compilation with GCC backend"
-  depends=("gcc=$pkgver-$pkgrel" libisl.so)
-
-  cd gcc-build
-  make -C gcc DESTDIR="$pkgdir" jit.install-common jit.install-info
 
   # Install Runtime Library Exception
   install -d "$pkgdir/usr/share/licenses/$pkgname/"
